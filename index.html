@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartConsult AI Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #030712; }
+        .loader { border-top-color: #8b5cf6; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(3d(1, 1, 1, 360deg)); } }
+        .glass-card { background: rgba(17, 24, 39, 0.8); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .sidebar-item { transition: all 0.2s ease-in-out; }
+        .sidebar-item.active, .sidebar-item:hover { background-color: #8b5cf6; color: white; box-shadow: 0 0 15px rgba(139, 92, 246, 0.5); }
+        .lucide { width: 20px; height: 20px; stroke-width: 2; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1f2937; }
+        ::-webkit-scrollbar-thumb { background: #4f46e5; border-radius: 4px; }
+        .view { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="text-gray-200">
+    <div class="flex h-screen bg-gray-900">
+        <!-- Sidebar -->
+        <aside class="w-64 flex-shrink-0 bg-gray-900/50 p-4 border-r border-gray-700/50 flex flex-col">
+            <div class="flex items-center mb-10 p-2">
+                <i data-lucide="brain-circuit" class="h-10 w-10 text-purple-400"></i>
+                <h1 class="text-2xl font-bold ml-2 text-white">SmartConsult</h1>
+            </div>
+            <nav class="space-y-2">
+                <a href="#" id="nav-dashboard" class="sidebar-item flex items-center py-3 px-4 rounded-lg">
+                    <i data-lucide="layout-dashboard" class="mr-3"></i>Dashboard
+                </a>
+                <a href="#" id="nav-new-analysis" class="sidebar-item flex items-center py-3 px-4 rounded-lg">
+                    <i data-lucide="file-plus-2" class="mr-3"></i>New Analysis
+                </a>
+                <a href="#" id="nav-case-history" class="sidebar-item flex items-center py-3 px-4 rounded-lg">
+                    <i data-lucide="history" class="mr-3"></i>Case History
+                </a>
+            </nav>
+            <div class="mt-auto p-2 text-center text-xs text-gray-500">
+                <p>AI Consulting Platform v2.2</p>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 p-6 md:p-10 overflow-y-auto">
+            <div id="view-dashboard" class="view">
+                 <h1 class="text-4xl font-bold mb-8 text-white">Dashboard</h1>
+                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div class="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="glass-card p-6 rounded-xl">
+                            <h2 class="text-lg font-semibold text-gray-400 flex items-center"><i data-lucide="file-text" class="mr-2"></i>Total Analyses</h2>
+                            <p id="total-analyses" class="text-5xl font-bold mt-2 text-white">0</p>
+                        </div>
+                        <div class="glass-card p-6 rounded-xl">
+                             <h2 class="text-lg font-semibold text-gray-400 flex items-center"><i data-lucide="users" class="mr-2"></i>Clients Served</h2>
+                             <p id="clients-served" class="text-5xl font-bold mt-2 text-white">0</p>
+                        </div>
+                        <div class="glass-card p-6 rounded-xl md:col-span-2">
+                             <h2 class="text-lg font-semibold text-gray-400 mb-2 flex items-center"><i data-lucide="activity" class="mr-2"></i>Recent Activity</h2>
+                             <div id="recent-activity-container" class="space-y-3"></div>
+                        </div>
+                    </div>
+                    <div class="glass-card p-6 rounded-xl">
+                        <h2 class="text-lg font-semibold text-gray-400 mb-4 flex items-center"><i data-lucide="pie-chart" class="mr-2"></i>Analysis by Type</h2>
+                        <div id="analysis-chart" class="min-h-[250px]"></div>
+                    </div>
+                 </div>
+            </div>
+
+            <div id="view-new-analysis" class="view hidden">
+                <h1 class="text-4xl font-bold mb-8 text-white">Create New Analysis</h1>
+                <div class="mb-6 max-w-sm">
+                    <select id="analysis-type-selector" class="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500">
+                        <option value="standard">Autonomous Case Analysis</option>
+                        <option value="swot">SWOT Analysis</option>
+                        <option value="pestle">PESTLE Analysis</option>
+                    </select>
+                </div>
+                <div id="form-container"></div>
+            </div>
+
+            <div id="view-case-history" class="view hidden">
+                <h1 class="text-4xl font-bold mb-8 text-white">Case History</h1>
+                <div id="case-history-container" class="space-y-4"></div>
+            </div>
+            
+            <div id="view-report" class="view hidden">
+                <!-- Report content will be injected here -->
+            </div>
+        </main>
+    </div>
+
+    <script>
+        lucide.createIcons();
+        const API_URL = 'http://127.0.0.1:8000';
+        let allCases = [];
+
+        // --- Navigation ---
+        const navLinks = {
+            'nav-dashboard': document.getElementById('view-dashboard'),
+            'nav-new-analysis': document.getElementById('view-new-analysis'),
+            'nav-case-history': document.getElementById('view-case-history'),
+        };
+        const views = document.querySelectorAll('.view');
+        
+        document.querySelector('nav').addEventListener('click', (e) => {
+            const link = e.target.closest('a');
+            if (link && navLinks[link.id]) {
+                e.preventDefault();
+                document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
+                link.classList.add('active');
+                views.forEach(v => v.classList.add('hidden'));
+                navLinks[link.id].classList.remove('hidden');
+            }
+        });
+
+        // --- Analysis Forms ---
+        const analysisTypeSelector = document.getElementById('analysis-type-selector');
+        const formContainer = document.getElementById('form-container');
+
+        const forms = {
+            standard: `
+                <h2 class="text-2xl font-bold mb-6 flex items-center text-white"><i data-lucide="file-text" class="mr-3 text-purple-400"></i>Autonomous Case Details</h2>
+                <form id="standard-form" class="space-y-6">
+                    <input type="hidden" name="analysis_type" value="standard">
+                    <div><label for="company_name" class="block text-sm font-medium text-gray-400 mb-2">Company Name</label><input type="text" id="company_name" name="company_name" required class="w-full px-4 py-3 bg-gray-900/50 border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="e.g., Innovate Inc."></div>
+                    <div><label for="industry" class="block text-sm font-medium text-gray-400 mb-2">Industry</label><input type="text" id="industry" name="industry" required class="w-full px-4 py-3 bg-gray-900/50 border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="e.g., E-commerce"></div>
+                    <div><label for="problem_statement" class="block text-sm font-medium text-gray-400 mb-2">Problem Statement</label><textarea id="problem_statement" name="problem_statement" rows="4" required class="w-full px-4 py-3 bg-gray-900/50 border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="Describe the core business problem..."></textarea></div>
+                    <div class="flex justify-end pt-2"><button type="submit" class="bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold py-3 px-6 rounded-lg hover:scale-105 transition-transform flex items-center min-w-[200px] justify-center"><i data-lucide="zap" class="mr-2"></i><span class="btn-text">Initiate Analysis</span></button></div>
+                </form>
+            `,
+            swot: `
+                <h2 class="text-2xl font-bold mb-6 flex items-center text-white"><i data-lucide="swords" class="mr-3 text-purple-400"></i>SWOT Analysis Details</h2>
+                <form id="swot-form" class="space-y-6">
+                    <input type="hidden" name="analysis_type" value="swot">
+                    <div><label for="swot_company_name" class="block text-sm font-medium text-gray-400 mb-2">Company Name</label><input type="text" id="swot_company_name" name="company_name" required class="w-full px-4 py-3 bg-gray-900/50 border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="e.g., Innovate Inc."></div>
+                    <div class="flex justify-end pt-2"><button type="submit" class="bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold py-3 px-6 rounded-lg hover:scale-105 transition-transform flex items-center min-w-[200px] justify-center"><i data-lucide="zap" class="mr-2"></i><span class="btn-text">Generate SWOT</span></button></div>
+                </form>
+            `,
+            pestle: `
+                <h2 class="text-2xl font-bold mb-6 flex items-center text-white"><i data-lucide="globe-2" class="mr-3 text-purple-400"></i>PESTLE Analysis Details</h2>
+                <form id="pestle-form" class="space-y-6">
+                    <input type="hidden" name="analysis_type" value="pestle">
+                    <div><label for="pestle_industry" class="block text-sm font-medium text-gray-400 mb-2">Industry</label><input type="text" id="pestle_industry" name="industry" required class="w-full px-4 py-3 bg-gray-900/50 border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="e.g., Electric Vehicles"></div>
+                    <div class="flex justify-end pt-2"><button type="submit" class="bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold py-3 px-6 rounded-lg hover:scale-105 transition-transform flex items-center min-w-[200px] justify-center"><i data-lucide="zap" class="mr-2"></i><span class="btn-text">Generate PESTLE</span></button></div>
+                </form>
+            `
+        };
+
+        function renderForm() {
+            const selectedType = analysisTypeSelector.value;
+            formContainer.innerHTML = `<div class="glass-card p-8 rounded-2xl shadow-2xl">${forms[selectedType]}</div>`;
+            lucide.createIcons();
+            const form = formContainer.querySelector('form');
+            form.addEventListener('submit', handleAnalysisSubmit);
+        }
+
+        analysisTypeSelector.addEventListener('change', renderForm);
+
+        async function handleAnalysisSubmit(e) {
+            e.preventDefault();
+            const form = e.target;
+            const button = form.querySelector('button[type="submit"]');
+            const buttonText = button.querySelector('.btn-text');
+            const originalButtonText = buttonText.innerHTML;
+            
+            button.disabled = true;
+            
+            const thinkingMessages = ["Diagnosing Problem...", "Building Context...", "Formulating Strategy..."];
+            let messageIndex = 0;
+            buttonText.textContent = thinkingMessages[messageIndex];
+            const thinkingInterval = setInterval(() => {
+                messageIndex = (messageIndex + 1) % thinkingMessages.length;
+                buttonText.textContent = thinkingMessages[messageIndex];
+            }, 3000);
+
+            const payload = Object.fromEntries(new FormData(form).entries());
+            const analysisType = payload.analysis_type;
+            const endpoints = { standard: '/start_case', swot: '/analyze/swot', pestle: '/analyze/pestle' };
+            
+            try {
+                const response = await fetch(`${API_URL}${endpoints[analysisType]}`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const responseText = await response.text();
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}\n${responseText}`);
+                const data = JSON.parse(responseText);
+                
+                showReportView(data.report_html);
+                await loadDashboardData();
+
+            } catch (error) {
+                console.error(`Error with ${analysisType} analysis:`, error);
+                alert(`Failed to generate ${analysisType} analysis. Check console for details.`);
+            } finally {
+                clearInterval(thinkingInterval);
+                buttonText.innerHTML = originalButtonText;
+                button.disabled = false;
+            }
+        }
+
+        // --- Dashboard & History ---
+        async function loadDashboardData() {
+            try {
+                const response = await fetch(`${API_URL}/cases`);
+                if (!response.ok) throw new Error('Failed to fetch cases');
+                allCases = await response.json();
+                
+                document.getElementById('total-analyses').textContent = allCases.length;
+                const uniqueClients = new Set(allCases.map(c => c.company_name).filter(Boolean));
+                document.getElementById('clients-served').textContent = uniqueClients.size;
+                
+                renderAnalysisChart();
+                renderHistoryList();
+                renderRecentActivity();
+
+            } catch (error) {
+                console.error("Error loading dashboard data:", error);
+            }
+        }
+        
+        document.getElementById('case-history-container').addEventListener('click', (e) => {
+            if(e.target.closest('.view-report-btn')) {
+                e.preventDefault();
+                showReportView(e.target.closest('.view-report-btn').dataset.path);
+            }
+        });
+
+        function showReportView(reportPath) {
+            const reportView = document.getElementById('view-report');
+            views.forEach(v => v.classList.add('hidden'));
+            reportView.classList.remove('hidden');
+            
+            const filename = reportPath.split(/\/|\\/).pop();
+            const reportUrl = `${window.location.origin}/reports/${filename}`;
+            
+            reportView.innerHTML = `
+                <div class="flex justify-between items-center mb-6">
+                    <h1 class="text-4xl font-bold text-white">Analysis Report</h1>
+                    <a href="${reportUrl}" target="_blank" class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 flex items-center">
+                        <i data-lucide="external-link" class="mr-2"></i> Open Full Report
+                    </a>
+                </div>
+                <iframe src="${reportUrl}" class="w-full h-[75vh] rounded-lg border-2 border-gray-700/50"></iframe>
+            `;
+            lucide.createIcons();
+        }
+
+        function renderAnalysisChart() {
+            const counts = allCases.reduce((acc, c) => {
+                const type = c.analysis_type || 'standard';
+                acc[type] = (acc[type] || 0) + 1;
+                return acc;
+            }, {});
+
+            var options = {
+                series: Object.values(counts),
+                labels: Object.keys(counts).map(k => k.charAt(0).toUpperCase() + k.slice(1)),
+                chart: { type: 'donut', height: 300, background: 'transparent' },
+                theme: { mode: 'dark', palette: 'palette2' },
+                legend: { position: 'bottom', labels: { colors: '#9ca3af' } },
+                dataLabels: { enabled: false },
+                plotOptions: { pie: { donut: { labels: { show: true, total: { show: true, label: 'Total', color: '#9ca3af' } } } } }
+            };
+            const chartEl = document.querySelector("#analysis-chart");
+            chartEl.innerHTML = '';
+            var chart = new ApexCharts(chartEl, options);
+            chart.render();
+        }
+
+        function renderHistoryList() {
+            const historyContainer = document.getElementById('case-history-container');
+            if (allCases.length === 0) {
+                historyContainer.innerHTML = `<p class="text-gray-400">No analyses have been run yet.</p>`;
+                return;
+            }
+            historyContainer.innerHTML = allCases.map(c => `
+                <div class="glass-card p-4 rounded-lg flex justify-between items-center hover:border-purple-500 border border-transparent transition-colors">
+                    <div>
+                        <h3 class="font-bold text-white">${c.title || 'Untitled Analysis'}</h3>
+                        <p class="text-sm text-gray-400">${new Date(c.created_at * 1000).toLocaleString()}</p>
+                    </div>
+                    <a href="#" class="view-report-btn bg-gray-700 py-2 px-4 rounded-md text-sm hover:bg-purple-600 transition-colors" data-path="${c.report_html}">View Report</a>
+                </div>
+            `).join('');
+        }
+        
+        function renderRecentActivity() {
+             const recentActivityContainer = document.getElementById('recent-activity-container');
+             const recent = allCases.slice(0, 3);
+             if (recent.length === 0) {
+                recentActivityContainer.innerHTML = `<p class="text-gray-500 text-sm">No recent activity.</p>`;
+                return;
+             }
+             recentActivityContainer.innerHTML = recent.map(c => `
+                <div class="text-sm text-gray-400 border-b border-gray-700/50 py-2">
+                    <span class="font-semibold text-purple-400">${c.analysis_type.toUpperCase()}</span> for <span class="font-semibold text-white">${c.title.replace('Analysis for','').replace('Case Study for','')}</span>
+                </div>
+             `).join('');
+        }
+
+        // --- Initial Load ---
+        function init() {
+            document.getElementById('nav-dashboard').classList.add('active');
+            renderForm();
+            loadDashboardData();
+        }
+
+        init();
+    </script>
+</body>
+</html>
